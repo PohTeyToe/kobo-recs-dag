@@ -20,8 +20,10 @@ type OLDoc = {
   key: string;
   title: string;
   author_name?: string[];
+  authors?: { name: string }[];
   first_publish_year?: number;
   cover_i?: number;
+  cover_id?: number;
   subject?: string[];
 };
 
@@ -87,22 +89,54 @@ const SUBJECT_LABEL: Record<string, string> = {
 };
 
 // ---------- 1. Ingest Open Library ----------
+function sleep(ms: number) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
 async function fetchSubject(subject: string, limit = 100): Promise<Book[]> {
-  const url = `https://openlibrary.org/search.json?subject=${subject}&limit=${limit}&fields=key,title,author_name,first_publish_year,cover_i,subject`;
-  const res = await fetch(url, { headers: { "User-Agent": "kobo-recs-dag-demo" } });
-  if (!res.ok) throw new Error(`OpenLibrary ${subject} ${res.status}`);
-  const json = (await res.json()) as { docs: OLDoc[] };
-  return json.docs
-    .filter((d) => d.title && d.author_name && d.author_name.length > 0)
-    .map((d) => ({
-      book_id: d.key.replace("/works/", ""),
-      title: d.title.slice(0, 120),
-      author: d.author_name![0],
-      year: d.first_publish_year ?? null,
-      cover_id: d.cover_i ?? null,
-      primary_subject: subject,
-      subjects: (d.subject ?? []).slice(0, 8),
-    }));
+  // Try the /search.json endpoint first; fall back to /subjects/{name}.json
+  // which has a slightly different shape but the same data we need.
+  const candidates = [
+    `https://openlibrary.org/search.json?subject=${subject}&limit=${limit}&fields=key,title,author_name,first_publish_year,cover_i,subject`,
+    `https://openlibrary.org/subjects/${subject}.json?limit=${limit}`,
+  ];
+  let lastErr: unknown;
+  for (const url of candidates) {
+    for (let attempt = 0; attempt < 4; attempt++) {
+      try {
+        const res = await fetch(url, {
+          headers: { "User-Agent": "kobo-recs-dag-demo (github.com/PohTeyToe/kobo-recs-dag)" },
+        });
+        if (!res.ok) throw new Error(`OpenLibrary ${subject} ${res.status}`);
+        const json = (await res.json()) as
+          | { docs: OLDoc[] }
+          | { works: OLDoc[] };
+        const docs = "docs" in json ? json.docs : json.works;
+        return docs
+          .map((d: OLDoc) => {
+            const author =
+              (d.author_name && d.author_name[0]) ||
+              (d.authors && d.authors[0]?.name) ||
+              null;
+            if (!d.title || !author) return null;
+            return {
+              book_id: d.key.replace("/works/", ""),
+              title: d.title.slice(0, 120),
+              author,
+              year: d.first_publish_year ?? null,
+              cover_id: d.cover_i ?? d.cover_id ?? null,
+              primary_subject: subject,
+              subjects: (d.subject ?? []).slice(0, 8),
+            } as Book;
+          })
+          .filter((b): b is Book => b !== null);
+      } catch (err) {
+        lastErr = err;
+        await sleep(800 * (attempt + 1));
+      }
+    }
+  }
+  throw lastErr ?? new Error(`OpenLibrary ${subject} failed`);
 }
 
 async function ingestBooks(): Promise<Book[]> {
@@ -112,6 +146,7 @@ async function ingestBooks(): Promise<Book[]> {
     const books = await fetchSubject(s, 100);
     console.log(`${books.length} books`);
     all.push(...books);
+    await sleep(400); // be polite to Open Library
   }
   // dedupe by book_id, keeping first occurrence (preserves primary_subject)
   const seen = new Set<string>();
@@ -557,6 +592,21 @@ async function main() {
 }
 
 main().catch((e) => {
-  console.error(e);
+  console.error("[build-data] live ingest failed:", e?.message ?? e);
+  // If the materialized snapshot already exists (committed to the repo),
+  // continue the build with the cached snapshot rather than failing the
+  // deploy on a transient Open Library outage.
+  const out = join(process.cwd(), "src", "data", "computed.json");
+  try {
+    const stat = require("node:fs").statSync(out);
+    if (stat && stat.size > 0) {
+      console.warn(
+        `[build-data] using cached snapshot at ${out} (${stat.size} bytes)`,
+      );
+      process.exit(0);
+    }
+  } catch {
+    // no cached snapshot — fall through to fail
+  }
   process.exit(1);
 });
