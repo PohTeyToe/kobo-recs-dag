@@ -1,0 +1,85 @@
+version: 2
+
+sources:
+  - name: raw
+    description: "Raw landed data, before any transformation"
+    tables:
+      - name: openlibrary_search
+        description: "Open Library /search.json responses, one row per doc, partitioned by ingestion_date"
+      - name: reader_events
+        description: "SYNTHETIC reader-event stream (page_read, finish, abandon, rate). For demo only — not real Kobo telemetry."
+
+models:
+  - name: stg_books
+    description: "Cleaned bibliographic records from Open Library"
+    columns:
+      - name: book_id
+        description: "Open Library work id (e.g. OL12345W)"
+        tests:
+          - unique
+          - not_null
+      - name: title
+        tests: [not_null]
+      - name: author
+        tests: [not_null]
+      - name: primary_subject
+        tests:
+          - not_null
+          - accepted_values:
+              values: [fiction, mystery, science_fiction, romance, fantasy, young_adult]
+
+  - name: stg_events
+    description: "Cleaned synthetic reader events"
+    columns:
+      - name: event_id
+        tests: [unique, not_null]
+      - name: user_id
+        tests: [not_null]
+      - name: book_id
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_books')
+              field: book_id
+      - name: event_type
+        tests:
+          - accepted_values:
+              values: [page_read, finish, abandon, rate]
+
+  - name: int_user_genre_affinity
+    description: "Per-user × subject weighted-and-normalized affinity"
+    tests:
+      # Funnel-integrity: catches double-counting / weighting bugs
+      - dbt_utils.expression_is_true:
+          expression: "normalized_score >= 0 AND normalized_score <= 1"
+    columns:
+      - name: user_id
+        tests: [not_null]
+      - name: subject
+        tests:
+          - accepted_values:
+              values: [fiction, mystery, science_fiction, romance, fantasy, young_adult]
+
+  - name: mart_recs
+    description: "Top-10 per-user recommendations under both strategies"
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [user_id, book_id, strategy]
+    columns:
+      - name: user_id
+        tests: [not_null]
+      - name: book_id
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_books')
+              field: book_id
+      - name: strategy
+        tests:
+          - accepted_values:
+              values: [quiz, collab]
+      - name: rank
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: "rank BETWEEN 1 AND 10"

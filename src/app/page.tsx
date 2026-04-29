@@ -1,101 +1,134 @@
-import Image from "next/image";
+import Link from "next/link";
+import data from "@/data/computed.json";
 
 export default function Home() {
+  const passed = data.tests.filter((t) => t.status === "pass").length;
   return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-8 row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="https://nextjs.org/icons/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-semibold">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li>Save and see your changes instantly.</li>
-        </ol>
+    <div className="space-y-12">
+      <section>
+        <p className="text-xs uppercase tracking-widest text-stone-500 mb-3">
+          Portfolio submission · Rakuten Kobo Data Engineer Co-op
+        </p>
+        <h1 className="text-4xl md:text-5xl font-semibold tracking-tight leading-tight">
+          A book-recommendations pipeline that does more than ask one onboarding
+          quiz.
+        </h1>
+        <p className="mt-6 text-lg text-stone-700 max-w-3xl">
+          Kobo&apos;s Spring 2026 update (April 2) shipped personalized
+          recommendations driven by a single onboarding quiz. Power users on
+          r/kobo and MobileRead pointed out the gaps: no genre exclusion, no
+          dislike, and no learning from what you actually read. This demo is a
+          working sketch of what a richer signal looks like — built end-to-end
+          on the same stack the JD calls out: Airflow, dbt, SQL, Python, BI.
+        </p>
+      </section>
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="https://nextjs.org/icons/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:min-w-44"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
-        </div>
-      </main>
-      <footer className="row-start-3 flex gap-6 flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+      <section className="grid md:grid-cols-3 gap-4">
+        <Stat
+          label="Books ingested"
+          value={data.counts.books.toLocaleString()}
+          sub="Open Library /search.json across 6 subjects"
+        />
+        <Stat
+          label="Synthetic reader events"
+          value={data.counts.events.toLocaleString()}
+          sub={`${data.counts.users} users · weighted page-read / finish / abandon / rate`}
+        />
+        <Stat
+          label="dbt tests passing"
+          value={`${passed} / ${data.tests.length}`}
+          sub="schema + funnel-integrity"
+        />
+      </section>
+
+      <section className="grid md:grid-cols-2 gap-6">
+        <Card
+          href="/dag"
+          title="Pipeline"
+          body="Five-stage DAG: Open Library ingest → staging → intermediate (user × subject affinity) → marts → reverse-ETL to a recs cache. The Airflow file in /dags/recs_dag.py shows the production shape."
+        />
+        <Card
+          href="/recs"
+          title="Recs explorer"
+          body="Pick a synthetic user. See the quiz-only strategy alongside a collaborative-filtering strategy with content backstop. Each row carries an explanation."
+        />
+        <Card
+          href="/quality"
+          title="Data quality"
+          body="Schema tests on every model (unique, not_null, accepted_values, relationships) plus funnel tests catching genre-affinity overflow, orphan recs, and duplicate output rows."
+        />
+        <Card
+          href="https://github.com/PohTeyToe/kobo-recs-dag"
+          title="Source on GitHub"
+          body="Public repo — MIT. Includes the dbt SQL models in /models, the Airflow DAG in /dags, and the Node.js build pipeline in /scripts/build-data.ts."
+          external
+        />
+      </section>
+
+      <section className="bg-white border border-stone-200 rounded-lg p-6">
+        <h2 className="text-lg font-semibold mb-2">Why this shape fits Tolino BI</h2>
+        <ul className="list-disc list-inside space-y-1.5 text-stone-700 text-sm">
+          <li>
+            Cross-border partner reporting (Hugendubel, Thalia, Weltbild) needs
+            referential integrity guaranteed by schema tests, not goodwill.
+          </li>
+          <li>
+            Per-page-read royalty allocation under Kobo Plus is the same shape
+            of problem: weight events, normalize per actor, materialize a mart.
+          </li>
+          <li>
+            Reverse-ETL from <code>mart_recs</code> to a Redis cache is the
+            production pattern that keeps an in-app recs surface low-latency
+            without coupling reads to the warehouse.
+          </li>
+        </ul>
+      </section>
     </div>
+  );
+}
+
+function Stat({
+  label,
+  value,
+  sub,
+}: {
+  label: string;
+  value: string;
+  sub: string;
+}) {
+  return (
+    <div className="bg-white border border-stone-200 rounded-lg p-5">
+      <p className="text-xs uppercase tracking-widest text-stone-500">{label}</p>
+      <p className="text-3xl font-semibold mt-2 tabular-nums">{value}</p>
+      <p className="text-xs text-stone-500 mt-2">{sub}</p>
+    </div>
+  );
+}
+
+function Card({
+  href,
+  title,
+  body,
+  external,
+}: {
+  href: string;
+  title: string;
+  body: string;
+  external?: boolean;
+}) {
+  const cls =
+    "block bg-white border border-stone-200 rounded-lg p-6 hover:border-stone-400 transition-colors";
+  if (external)
+    return (
+      <a href={href} className={cls} target="_blank" rel="noreferrer">
+        <h3 className="font-semibold mb-1.5">{title} →</h3>
+        <p className="text-sm text-stone-600">{body}</p>
+      </a>
+    );
+  return (
+    <Link href={href} className={cls}>
+      <h3 className="font-semibold mb-1.5">{title} →</h3>
+      <p className="text-sm text-stone-600">{body}</p>
+    </Link>
   );
 }
